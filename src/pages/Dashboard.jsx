@@ -4,8 +4,15 @@ import { useAuth } from "../context/AuthContext";
 import axiosInstance from "../api/axiosInstance";
 
 function Dashboard() {
+
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+
+    const [editingProject, setEditingProject] = useState(null);
+    const [editForm, setEditForm] = useState({ name: "", description: "" });
+    const [updating, setUpdating] = useState(false);
+    const [updateError, setUpdateError] = useState("");
+    const [deletingProjectId, setDeletingProjectId] = useState(null);
 
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -64,8 +71,53 @@ function Dashboard() {
         }
     };
 
+
+    const handleEditClick = (project) => {
+    setEditingProject(project);
+    setEditForm({ name: project.name, description: project.description || "" });
+};
+
+    const handleUpdateProject = async () => {
+    if (!editForm.name.trim()) {
+        setUpdateError("Project name is required");
+        return;
+    }
+    setUpdating(true);
+    setUpdateError("");
+    try {
+        await axiosInstance.put(`/projects/${editingProject._id}`, editForm);
+        setEditingProject(null);
+        fetchProjects();
+    } catch (err) {
+        setUpdateError(err.response?.data?.message || "Something went wrong");
+    } finally {
+        setUpdating(false);
+    }
+};
+
+    const handleDeleteProject = async (projectId) => {
+          setDeletingProjectId(projectId);
+    try {
+       
+        await axiosInstance.delete(`/projects/${projectId}`);
+        fetchProjects();
+    } catch (err) {
+        // silent fail
+    }
+
+    finally{
+          setDeletingProjectId(null);
+    }
+};
+
     return (
         <div className="min-h-screen bg-gray-950">
+            {/* Deleting Toast */}
+         {deletingProjectId && (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-700 text-gray-300 text-sm px-4 py-2.5 rounded-lg shadow-lg z-50">
+        Deleting project...
+    </div>
+        )}
 
             {/* Navbar */}
             <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4">
@@ -157,12 +209,31 @@ function Dashboard() {
                                     {item.project.description || "No description provided"}
                                 </p>
 
-                                {/* Footer */}
-                                <div className="flex items-center justify-between text-xs text-gray-500">
-                                    <span>👥 {item.project.members} member{item.project.members !== 1 ? "s" : ""}</span>
-                                    <span>{new Date(item.project.createdAt).toLocaleDateString()}</span>
+                {/* Footer */}
+                               
+                 <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>👥 {item.project.members} member{item.project.members !== 1 ? "s" : ""}</span>
+                        <div className="flex items-center gap-2">
+                        <span>{new Date(item.project.createdAt).toLocaleDateString()}</span>
+                          {item.role === "admin" && (
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                <button
+                              onClick={() => handleEditClick(item.project)}
+                         className="text-gray-400 hover:text-white px-2 py-0.5 rounded transition-colors"
+                              >
+                                     Edit
+                              </button>
+                         <button
+                             onClick={() => handleDeleteProject(item.project._id)}
+                              className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded transition-colors"
+                           >
+                                 Delete
+                              </button>
+                           </div>
+                                )}
+                           </div>
+                             </div>
                                 </div>
-                            </div>
                         ))}
                     </div>
                 )}
@@ -226,6 +297,61 @@ function Dashboard() {
                     </div>
                 </div>
             )}
+
+         {/* Edit Project Modal */}
+   {editingProject && (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center px-4 z-50">
+        <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800">
+            <h3 className="text-white font-semibold text-lg mb-5">Edit Project</h3>
+
+            {updateError && (
+                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                    {updateError}
+                </div>
+            )}
+
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm text-gray-400 mb-1.5">Project Name</label>
+                    <input
+                        type="text"
+                        value={editForm.name}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                        className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 text-sm border border-gray-700 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm text-gray-400 mb-1.5">Description</label>
+                    <textarea
+                        value={editForm.description}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                        rows={3}
+                        className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 text-sm border border-gray-700 focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                    />
+                </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+                <button
+                    onClick={() => {
+                        setEditingProject(null);
+                        setUpdateError("");
+                    }}
+                    className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2.5 rounded-lg transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                    onClick={handleUpdateProject}
+                    disabled={updating}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+                >
+                    {updating ? "Saving..." : "Save Changes"}
+                </button>
+            </div>
+        </div>
+    </div>
+)}   
         </div>
     );
 }
