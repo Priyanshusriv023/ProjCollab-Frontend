@@ -20,6 +20,11 @@ function ProjectDetail() {
     const { user } = useAuth();
     const navigate = useNavigate();
 
+    const [isEditingTask, setIsEditingTask] = useState(false);
+    const [editTaskForm, setEditTaskForm] = useState({ title: "", description: "", assignedTo: "" });
+    const [updatingTask, setUpdatingTask] = useState(false);
+    const [editTaskError, setEditTaskError] = useState("");
+
     // Project state
     const [project, setProject] = useState(null);
     const [projectLoading, setProjectLoading] = useState(true);
@@ -188,6 +193,38 @@ function ProjectDetail() {
         </div>
     );
 
+
+    const handleUpdateTask = async () => {
+    if (!editTaskForm.title.trim()) {
+        setEditTaskError("Title is required");
+        return;
+    }
+    setUpdatingTask(true);
+    setEditTaskError("");
+    try {
+        await axiosInstance.put(`/tasks/${projectId}/t/${selectedTask._id}`, editTaskForm);
+        setIsEditingTask(false);
+        fetchTasks();
+        // update selectedTask locally so modal reflects changes
+        setSelectedTask((prev) => ({ ...prev, ...editTaskForm }));
+    } catch (err) {
+        setEditTaskError(err.response?.data?.message || "Something went wrong");
+    } finally {
+        setUpdatingTask(false);
+    }
+};
+
+    const handleUpdateMemberRole = async (userId, newRole) => {
+    try {
+        await axiosInstance.put(`/projects/${projectId}/members/${userId}`, {
+            newRole,
+        });
+        fetchMembers();
+    } catch (err) {
+        // silent fail
+    }
+}
+
     return (
         <div className="min-h-screen bg-gray-950">
 
@@ -310,92 +347,199 @@ function ProjectDetail() {
                         </div>
                         <div className="space-y-3">
                             {members.map((member) => (
-                                <div key={member.user._id} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <img
-                                            src={member.user.avatar?.url}
-                                            alt={member.user.username}
-                                            className="w-7 h-7 rounded-full object-cover"
-                                        />
-                                        <div>
-                                            <p className="text-white text-xs font-medium">{member.user.username}</p>
-                                            <p className="text-gray-500 text-xs">{member.role.replace("_", " ")}</p>
-                                        </div>
-                                    </div>
-                                    {isAdmin && member.user._id !== user._id && (
-                                        <button
-                                            onClick={() => handleRemoveMember(member.user._id)}
-                                            className="text-red-400 hover:text-red-300 text-xs transition-colors"
-                                        >
-                                            Remove
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+    <div key={member.user._id} className="flex flex-col gap-2 pb-3 border-b border-gray-800 last:border-0 last:pb-0">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <img
+                    src={member.user.avatar?.url}
+                    alt={member.user.username}
+                    className="w-7 h-7 rounded-full object-cover"
+                />
+                <p className="text-white text-xs font-medium">{member.user.username}</p>
+            </div>
+            {isAdmin && member.user._id !== user._id && (
+                <button
+                    onClick={() => handleRemoveMember(member.user._id)}
+                    className="text-red-400 hover:text-red-300 text-xs transition-colors"
+                >
+                    Remove
+                </button>
+            )}
+        </div>
+        {isAdmin && member.user._id !== user._id ? (
+            <select
+                value={member.role}
+                onChange={(e) => handleUpdateMemberRole(member.user._id, e.target.value)}
+                className="w-full bg-gray-800 text-gray-400 text-xs rounded-lg px-2 py-1.5 border border-gray-700 focus:outline-none focus:border-blue-500 transition-colors"
+            >
+                <option value="member">Member</option>
+                <option value="project_admin">Project Admin</option>
+                <option value="admin">Admin</option>
+            </select>
+        ) : (
+            <p className="text-gray-500 text-xs">{member.role.replace("_", " ")}</p>
+        )}
+    </div>
+))}
                         </div>
                     </div>
                 )}
             </div>
 
             {/* Task Detail Modal */}
-            {selectedTask && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center px-4 z-50">
-                    <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800">
-                        <div className="flex items-start justify-between mb-4">
-                            <h3 className="text-white font-semibold text-lg">{selectedTask.title}</h3>
-                            <button
-                                onClick={() => setSelectedTask(null)}
-                                className="text-gray-500 hover:text-white transition-colors text-xl leading-none"
-                            >
-                                ×
-                            </button>
+{selectedTask && (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center px-4 z-50">
+        <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800">
+
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+                <h3 className="text-white font-semibold text-lg">
+                    {isEditingTask ? "Edit Task" : selectedTask.title}
+                </h3>
+                <button
+                    onClick={() => {
+                        setSelectedTask(null);
+                        setIsEditingTask(false);
+                        setEditTaskError("");
+                    }}
+                    className="text-gray-500 hover:text-white transition-colors text-xl leading-none"
+                >
+                    ×
+                </button>
+            </div>
+
+            {/* View Mode */}
+            {!isEditingTask && (
+                <>
+                    {selectedTask.description && (
+                        <p className="text-gray-400 text-sm mb-4">{selectedTask.description}</p>
+                    )}
+
+                    {/* Status */}
+                    <div className="mb-4">
+                        <p className="text-gray-500 text-xs mb-2">Status</p>
+                        <div className="flex gap-2">
+                            {["todo", "in_progress", "done"].map((s) => (
+                                <button
+                                    key={s}
+                                    disabled={updatingStatus}
+                                    onClick={() => handleUpdateStatus(selectedTask._id, s)}
+                                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                                        selectedTask.status === s
+                                            ? STATUS_STYLES[s]
+                                            : "bg-gray-800 text-gray-500 border-gray-700 hover:border-gray-500"
+                                    }`}
+                                >
+                                    {STATUS_LABELS[s]}
+                                </button>
+                            ))}
                         </div>
+                    </div>
 
-                        {selectedTask.description && (
-                            <p className="text-gray-400 text-sm mb-4">{selectedTask.description}</p>
-                        )}
-
-                        {/* Status */}
+                    {/* Assigned to */}
+                    {selectedTask.assignedTo && (
                         <div className="mb-4">
-                            <p className="text-gray-500 text-xs mb-2">Status</p>
-                            <div className="flex gap-2">
-                                {["todo", "in_progress", "done"].map((s) => (
-                                    <button
-                                        key={s}
-                                        disabled={updatingStatus}
-                                        onClick={() => handleUpdateStatus(selectedTask._id, s)}
-                                        className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                                            selectedTask.status === s
-                                                ? STATUS_STYLES[s]
-                                                : "bg-gray-800 text-gray-500 border-gray-700 hover:border-gray-500"
-                                        }`}
-                                    >
-                                        {STATUS_LABELS[s]}
-                                    </button>
-                                ))}
-                            </div>
+                            <p className="text-gray-500 text-xs mb-1">Assigned to</p>
+                            <p className="text-white text-sm">{selectedTask.assignedTo.username}</p>
                         </div>
+                    )}
 
-                        {/* Assigned to */}
-                        {selectedTask.assignedTo && (
-                            <div className="mb-4">
-                                <p className="text-gray-500 text-xs mb-1">Assigned to</p>
-                                <p className="text-white text-sm">{selectedTask.assignedTo.username}</p>
-                            </div>
-                        )}
-
-                        {/* Delete */}
-                        {canManageTasks && (
+                    {/* Edit + Delete buttons */}
+                    {canManageTasks && (
+                        <div className="flex gap-3 mt-2">
+                            <button
+                                onClick={() => {
+                                    setIsEditingTask(true);
+                                    setEditTaskForm({
+                                        title: selectedTask.title,
+                                        description: selectedTask.description || "",
+                                        assignedTo: selectedTask.assignedTo?._id || "",
+                                    });
+                                }}
+                                className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2 rounded-lg transition-colors"
+                            >
+                                Edit
+                            </button>
                             <button
                                 onClick={() => handleDeleteTask(selectedTask._id)}
-                                className="w-full mt-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-sm font-medium py-2 rounded-lg transition-colors"
+                                className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-sm font-medium py-2 rounded-lg transition-colors"
                             >
-                                Delete Task
+                                Delete
                             </button>
-                        )}
-                    </div>
-                </div>
+                        </div>
+                    )}
+                </>
             )}
+
+            {/* Edit Mode */}
+            {isEditingTask && (
+                <>
+                    {editTaskError && (
+                        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                            {editTaskError}
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1.5">Title</label>
+                            <input
+                                type="text"
+                                value={editTaskForm.title}
+                                onChange={(e) => setEditTaskForm((prev) => ({ ...prev, title: e.target.value }))}
+                                className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 text-sm border border-gray-700 focus:outline-none focus:border-blue-500 transition-colors"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1.5">Description</label>
+                            <textarea
+                                value={editTaskForm.description}
+                                onChange={(e) => setEditTaskForm((prev) => ({ ...prev, description: e.target.value }))}
+                                rows={3}
+                                className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 text-sm border border-gray-700 focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-1.5">Assign To</label>
+                            <select
+                                value={editTaskForm.assignedTo}
+                                onChange={(e) => setEditTaskForm((prev) => ({ ...prev, assignedTo: e.target.value }))}
+                                className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 text-sm border border-gray-700 focus:outline-none focus:border-blue-500 transition-colors"
+                            >
+                                <option value="">Unassigned</option>
+                                {members.map((m) => (
+                                    <option key={m.user._id} value={m.user._id}>
+                                        {m.user.username}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 mt-6">
+                        <button
+                            onClick={() => {
+                                setIsEditingTask(false);
+                                setEditTaskError("");
+                            }}
+                            className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2.5 rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleUpdateTask}
+                            disabled={updatingTask}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+                        >
+                            {updatingTask ? "Saving..." : "Save Changes"}
+                        </button>
+                    </div>
+                </>
+            )}
+        </div>
+    </div>
+)}
+           
 
             {/* Create Task Modal */}
             {showTaskModal && (
