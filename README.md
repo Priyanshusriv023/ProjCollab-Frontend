@@ -20,9 +20,9 @@ A full stack project management application inspired by Basecamp.
 **Deployment:** Vercel (frontend), Render (backend)
 
 ## Run Locally
-\```
+```
 git clone https://github.com/Priyanshusriv023/ProjCollab-Frontend.git
 cd ProjCollab-Frontend
 npm install
 npm run dev
-\```
+```
